@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offertklar — offert på 60 sekunder</title>
+  <meta name="description" content="Skriv en snygg offert till kund på under en minut. Gratis med vattenstämpel. Pro 149 kr, engång.">
+  <style>
+    :root { color-scheme: light; --ink:#1c1917; --muted:#57534e; --line:#e7e5e4; --paper:#fff; --bg:#f5f5f4; --accent:#b45309; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:16px/1.45 system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+    header, main, footer { max-width:980px; margin:0 auto; padding:24px 16px; }
+    h1 { font-size:2rem; margin:0 0 8px; }
+    .lede { color:var(--muted); margin:0 0 16px; }
+    .price { display:inline-block; background:#fff7ed; color:#9a3412; border-radius:999px; padding:4px 10px; font-weight:600; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
+    form, .sheet { background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+    input { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+    .row { display:grid; grid-template-columns:1fr 70px 110px 32px; gap:8px; margin-bottom:8px; }
+    button { font:inherit; cursor:pointer; border-radius:8px; border:1px solid var(--line); background:#fff; padding:8px 12px; }
+    button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .sheet { position:relative; min-height:420px; }
+    .wm { position:absolute; inset:40% 0 auto; text-align:center; font-size:28px; color:rgba(180,83,9,.18); transform:rotate(-18deg); pointer-events:none; font-weight:700; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th, td { text-align:left; padding:6px 0; border-bottom:1px solid var(--line); }
+    td.num, th.num { text-align:right; }
+    .totals { margin-top:12px; text-align:right; }
+    footer { color:var(--muted); font-size:13px; }
+    @media print {
+      body { background:#fff; }
+      header, form, footer, .actions, .no-print { display:none !important; }
+      main { max-width:none; padding:0; }
+      .sheet { border:0; }
+      .wm.hide { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="price">Pro 149 kr, engång. Gratis att prova.</p>
+    <h1>Offertklar</h1>
+    <p class="lede">Skriv en offert, skriv ut den som PDF, skicka till kunden. Gratisversionen har en vattenstämpel. Pro tar bort den.</p>
+  </header>
+  <main class="grid">
+    <form id="form">
+      <label>Ditt företag</label>
+      <input id="from" value="Mitt Bolag AB" required>
+      <label>Kund</label>
+      <input id="to" value="Kundens Företag AB" required>
+      <label>Giltig t.o.m.</label>
+      <input id="valid" type="date">
+      <label>Rader</label>
+      <div id="lines"></div>
+      <button type="button" id="add">Lägg till rad</button>
+      <div class="actions">
+        <button class="primary" type="button" id="print">Skriv ut / PDF</button>
+        <button type="button" id="buy">Lås upp Pro, 149 kr</button>
+      </div>
+      <label>Pro-nyckel (klistras in efter köp)</label>
+      <input id="key" placeholder="OK-..." autocomplete="off">
+    </form>
+    <article class="sheet" id="sheet">
+      <div class="wm" id="wm">OFFERTKLAR GRATIS</div>
+      <p id="meta"></p>
+      <h2 id="title">Offert</h2>
+      <p><strong id="fromOut"></strong><br>till <span id="toOut"></span></p>
+      <table>
+        <thead><tr><th>Beskrivning</th><th class="num">Antal</th><th class="num">à</th><th class="num">Summa</th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+      <div class="totals">
+        <div>Exkl. moms: <strong id="net"></strong></div>
+        <div>Moms 25 %: <strong id="vat"></strong></div>
+        <div>Att betala: <strong id="gross"></strong></div>
+      </div>
+    </article>
+  </main>
+  <footer>
+    Offertklar är ett verktyg, inte ekonomisk rådgivning. Kontrollera belopp innan du skickar.
+  </footer>
+  <script>
+    const PRO = "OK-DAG1-PRO";
+    const linesEl = document.getElementById("lines");
+    const keyEl = document.getElementById("key");
+    const saved = localStorage.getItem("offertklar-key") || "";
+    keyEl.value = saved;
+
+    function money(n) {
+      return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(n || 0);
+    }
+    function isPro() { return keyEl.value.trim() === PRO; }
+    function addLine(desc, qty, price) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = '<input class="d" value="' + desc + '"><input class="q" type="number" min="0" step="1" value="' + qty + '"><input class="p" type="number" min="0" step="1" value="' + price + '"><button type="button" aria-label="Ta bort">×</button>';
+      row.querySelector("button").onclick = () => { row.remove(); render(); };
+      row.querySelectorAll("input").forEach((el) => el.addEventListener("input", render));
+      linesEl.appendChild(row);
+    }
+    function render() {
+      const rows = [...linesEl.querySelectorAll(".row")];
+      let net = 0;
+      const body = document.getElementById("body");
+      body.innerHTML = "";
+      rows.forEach((row) => {
+        const d = row.querySelector(".d").value;
+        const q = Number(row.querySelector(".q").value) || 0;
+        const p = Number(row.querySelector(".p").value) || 0;
+        const sum = q * p;
+        net += sum;
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td></td><td class='num'></td><td class='num'></td><td class='num'></td>";
+        tr.children[0].textContent = d;
+        tr.children[1].textContent = String(q);
+        tr.children[2].textContent = money(p);
+        tr.children[3].textContent = money(sum);
+        body.appendChild(tr);
+      });
+      const vat = net * 0.25;
+      document.getElementById("fromOut").textContent = document.getElementById("from").value;
+      document.getElementById("toOut").textContent = document.getElementById("to").value;
+      document.getElementById("meta").textContent = "Giltig t.o.m. " + (document.getElementById("valid").value || "—");
+      document.getElementById("net").textContent = money(net);
+      document.getElementById("vat").textContent = money(vat);
+      document.getElementById("gross").textContent = money(net + vat);
+      const pro = isPro();
+      document.getElementById("wm").classList.toggle("hide", pro);
+      document.getElementById("wm").style.display = pro ? "none" : "block";
+      localStorage.setItem("offertklar-key", keyEl.value.trim());
+    }
+    document.getElementById("add").onclick = () => { addLine("Ny rad", 1, 0); render(); };
+    document.getElementById("print").onclick = () => window.print();
+    document.getElementById("buy").onclick = () => {
+      alert("Pro kostar 149 kr. Betallänken läggs in när Lemon Squeezy-är igång. Tills dess är testnyckeln OK-DAG1-PRO.");
+    };
+    ["from", "to", "valid"].forEach((id) => document.getElementById(id).addEventListener("input", render));
+    keyEl.addEventListener("input", render);
+    const day = new Date();
+    day.setDate(day.getDate() + 14);
+    document.getElementById("valid").value = day.toISOString().slice(0, 10);
+    addLine("Konsultation", 8, 950);
+    addLine("Resa", 1, 450);
+    render();
+  </script>
+</body>
+</html>
